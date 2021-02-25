@@ -65,7 +65,7 @@ for (i in seq_along(orig_iden)) {
 
 df_meta <- data@meta.data
 df_meta['cell.ident'] <- new_iden
-df_meta["cell.ident"]
+#df_meta["cell.ident"]
 cell.annotation <- data@meta.data["orig.ident"]
 write.table(cell.annotation, paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                 col.names = FALSE, sep = "\t" )
@@ -123,7 +123,7 @@ infercnv_obj = CreateInfercnvObject(raw_counts_matrix=counts_matrix,
                                     annotations_file=paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                                     delim="\t",
                                     gene_order_file= paste(getwd(), "data/output/gene_chromopos.txt", sep = "/"),
-                                    ref_group_names=c("SC124nor","SC50nor", "SC68nor")) 
+                                    ref_group_names=c("norm")) 
 
 
 infercnv_obj = infercnv::run(infercnv_obj,
