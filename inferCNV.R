@@ -39,7 +39,7 @@ Seurat.STnorm.pca <- function(SeuratObj){
   return(SeuratObj.ST)
 }
 
-data <- Seurat.STnorm.pca(data)
+data <- readRDS(paste(working_dir, "cite-seq_ctcl_ctrl.SCT.rds"))
 saveRDS(data, file = paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
 raw_counts_matrix <- data@assays[["SCT"]]
 
@@ -66,7 +66,7 @@ for (i in seq_along(orig_iden)) {
 df_meta <- data@meta.data
 df_meta$cell.ident <- new_iden
 #df_meta["cell.ident"]
-cell.annotation <- df_meta$cell.ident
+cell.annotation <- df_meta["cell.ident"]
 write.table(cell.annotation, paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                 col.names = FALSE, sep = "\t" )
 
