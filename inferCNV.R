@@ -66,7 +66,7 @@ for (i in seq_along(orig_iden)) {
 df_meta <- data@meta.data
 df_meta$cell.ident <- new_iden
 #df_meta["cell.ident"]
-cell.annotation <- data@meta.data["cell.ident"]
+cell.annotation <- df_meta$cell.ident
 write.table(cell.annotation, paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                 col.names = FALSE, sep = "\t" )
 
@@ -114,7 +114,7 @@ counts_matrix <- raw_counts_matrix[c(results$hgnc_symbol), ]
 #-------------------------------------------------------------------------------
 # Create InferCNV object and run ------------------------------------------
 #-------------------------------------------------------------------------------
-out_dir <- paste(getwd(), "data/output/InferCNV/", sep ="")
+out_dir <- paste(getwd(), "/data/output/InferCNV/", sep ="")
 if (dir.exists(out_dir)){
 	    out_dir <- out_dir
   } else {dir.create(out_dir)}
@@ -123,11 +123,9 @@ infercnv_obj = CreateInfercnvObject(raw_counts_matrix=counts_matrix,
                                     annotations_file=paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                                     delim="\t",
                                     gene_order_file= paste(getwd(), "data/output/gene_chromopos.txt", sep = "/"),
-                                    ref_group_names=c("norm")) 
-
-
-infercnv_obj = infercnv::run(infercnv_obj,
-                             cutoff=0.1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+                                    ref_group_names=c("norm"))
+infercnv_obj = infercnv::run(infercnv_obj, cutoff=0.1,
+			     # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
                              out_dir=out_dir, 
                              cluster_by_groups=TRUE, 
                              denoise=TRUE,
