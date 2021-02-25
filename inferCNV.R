@@ -1,10 +1,10 @@
 #install dependencies 
-install.packages("rjags") #necessary for installing infercnv 
+#install.packages("rjags", repos ="https://CRAN.R-project.org/package=rjags") #necessary for installing infercnv 
 if (!requireNamespace("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-BiocManager::install("infercnv")
-install.packages("dplyr")
-install.packages("biomaRt")
+  install.packages("BiocManager", repo="http://cran.us.r-project.org")
+#BiocManager::install("infercnv")
+#install.packages("dplyr")
+#install.packages("biomaRt", "http://cran.us.r-project.org")
 
 library(infercnv)
 library(biomaRt)
@@ -40,6 +40,7 @@ Seurat.STnorm.pca <- function(SeuratObj){
 }
 
 data <- Seurat.STnorm.pca(data)
+saveRDS(data, file = paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
 raw_counts_matrix <- data@assays[["SCT"]]
 
 # 2. cell annotation files
@@ -113,7 +114,11 @@ counts_matrix <- raw_counts_matrix[c(results$hgnc_symbol), ]
 #-------------------------------------------------------------------------------
 # Create InferCNV object and run ------------------------------------------
 #-------------------------------------------------------------------------------
-out_dir <- paste(getwd(), "data/output/InferCNV/", sep = "/")
+out_dir <- paste(getwd(), "data/output/InferCNV/", sep ="")
+if (dir.exists(out_dir)){
+	    out_dir <- out_dir
+  } else {dir.create(out_dir)}
+
 infercnv_obj = CreateInfercnvObject(raw_counts_matrix=counts_matrix,
                                     annotations_file=paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                                     delim="\t",
