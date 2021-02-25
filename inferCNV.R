@@ -3,14 +3,16 @@ install.packages("rjags") #necessary for installing infercnv
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("infercnv")
- 
+install.packages("dplyr")
+install.packages("biomaRt")
+
 library(infercnv)
 library(biomaRt)
 library(dplyr)
 library(Seurat)
 
 #set working directory
-setwd("C:/Users/jtao/work_dir/CTCL")
+setwd("/home/tjinyan/work_dir/CTCL")
 working_dir <- getwd()
 Sys.setenv(language="en")
 #----------------------------------------------------------------------------
@@ -20,7 +22,7 @@ Sys.setenv(language="en")
 # 1. raw_counts matrix 
 # extract from Seurat object 
 # Read rds dataset
-data <- readRDS(paste(working_dir, "/data/CTCL-tumor-normal-seurat.rds",sep =""))
+data <- readRDS(paste(working_dir, "/data/citeseq-typed.rds",sep =""))
 
 data = data
 raw_counts_matrix <- data@assays[["RNA"]]
@@ -105,7 +107,7 @@ infercnv_obj = CreateInfercnvObject(raw_counts_matrix=counts_matrix,
 
 
 infercnv_obj = infercnv::run(infercnv_obj,
-                             cutoff=1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+                             cutoff=0.1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
                              out_dir=out_dir, 
                              cluster_by_groups=TRUE, 
                              denoise=TRUE,
