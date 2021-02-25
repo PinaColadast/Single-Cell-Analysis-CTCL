@@ -64,9 +64,9 @@ for (i in seq_along(orig_iden)) {
 }
 
 df_meta <- data@meta.data
-df_meta['cell.ident'] <- new_iden
+df_meta$cell.ident <- new_iden
 #df_meta["cell.ident"]
-cell.annotation <- data@meta.data["orig.ident"]
+cell.annotation <- data@meta.data["cell.ident"]
 write.table(cell.annotation, paste(getwd(), "data/output/cell.annotation.txt", sep = "/"),
                 col.names = FALSE, sep = "\t" )
 
