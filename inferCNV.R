@@ -23,17 +23,32 @@ Sys.setenv(language="en")
 # extract from Seurat object 
 # Read rds dataset
 data <- readRDS(paste(working_dir, "/data/citeseq-typed.rds",sep =""))
+# run SCT to take out doplets#
+Seurat.STnorm.pca <- function(SeuratObj){
+  
+  s.genes <- cc.genes$s.genes
+  g2m.genes <- cc.genes$g2m.genes
+  
+  
+  
+  SeuratObj <- CellCycleScoring(SeuratObj, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+  SeuratObj.ST <- SCTransform(SeuratObj, assay = "RNA",vars.to.regress =c( "percent.mt", "S.Score", "G2M.Score" ), return.only.var.genes = FALSE)
+  SeuratObj.ST <- FindVariableFeatures(SeuratObj.ST, nfeatures = 15000) 
+  SeuratObj.ST <- ScaleData(SeuratObj.ST)
+  SeuratObj.ST <- RunPCA(SeuratObj.ST)
+  return(SeuratObj.ST)
+}
 
-data = data
-raw_counts_matrix <- data@assays[["RNA"]]
+data <- Seurat.STnorm.pca(data)
+raw_counts_matrix <- data@assays[["SCT"]]
 
 # 2. cell annotation files
 
 tumor_function <- function (orig_ident) {
-  if (grepl('mf', orig_ident)) {
+  if (grepl('tumor', orig_ident)) {
     new_iden = 'tumor'
     
-  } else if (grepl('nor', orig_ident)){new_iden = 'norm'
+  } else if (grepl('norm', orig_ident)){new_iden = 'norm'
   
   }
   
@@ -41,7 +56,7 @@ tumor_function <- function (orig_ident) {
 }
 
 new_iden <- c()
-orig_iden <- data$orig.ident
+orig_iden <- as.vector(rownames(data@meta.data))
 for (i in seq_along(orig_iden)) {
   new = tumor_function(orig_iden[[i]])
   new_iden <- append(new_iden, new)
