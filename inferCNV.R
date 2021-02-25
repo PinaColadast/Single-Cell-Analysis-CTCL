@@ -39,8 +39,8 @@ Seurat.STnorm.pca <- function(SeuratObj){
   return(SeuratObj.ST)
 }
 
-data <- readRDS(paste(working_dir, "cite-seq_ctcl_ctrl.SCT.rds"))
-saveRDS(data, file = paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
+data <- readRDS(paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
+#saveRDS(data, file = paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
 raw_counts_matrix <- data@assays[["SCT"]]
 
 # 2. cell annotation files
