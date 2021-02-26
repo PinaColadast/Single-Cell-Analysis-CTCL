@@ -97,7 +97,7 @@ results <- results %>% select(hgnc_symbol, chromosome_name, start_position, end_
 
 #check if any duplicates in gene position
 rep_gene <- data.frame(table(results$hgnc_symbol))
-results[results$hgnc_symbol %in% rep_gene[rep_gene$Freq>1, ]$Var1, ]
+#results[results$hgnc_symbol %in% rep_gene[rep_gene$Freq>1, ]$Var1, ]
 
 #clear replicates
 results_unique <- results[!duplicated(results$hgnc_symbol), ]
