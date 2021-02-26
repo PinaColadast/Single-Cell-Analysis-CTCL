@@ -22,7 +22,7 @@ Sys.setenv(language="en")
 # 1. raw_counts matrix 
 # extract from Seurat object 
 # Read rds dataset
-data <- readRDS(paste(working_dir, "/data/citeseq-typed.rds",sep =""))
+data <- readRDS(paste(working_dir, "/data/cite-seq-ctcl-ctrl.rds",sep =""))
 # run SCT to take out doplets#
 Seurat.STnorm.pca <- function(SeuratObj){
   
@@ -39,9 +39,10 @@ Seurat.STnorm.pca <- function(SeuratObj){
   return(SeuratObj.ST)
 }
 
-data <- readRDS(paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
+#data <- Seurat.STnorm.pca(data)
+#data <- readRDS(paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
 #saveRDS(data, file = paste(getwd(), "/data/cite-seq_ctcl_ctrl.SCT.rds", sep = ""))
-raw_counts_matrix <- data@assays[["SCT"]]
+raw_counts_matrix <- data@assays[["RNA"]]
 
 # 2. cell annotation files
 
