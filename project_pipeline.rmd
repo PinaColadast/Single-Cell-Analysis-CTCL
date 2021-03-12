@@ -1,0 +1,424 @@
+---
+title: "TRBC analysis workflow"
+output: html_document
+author: Jinyan Tao
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Documentation for project pipeline
+
+This is an R Markdown document, documenting methodology implemented for TRBC1&2 analysis
+
+for multimodal data vignettes, please refer to : 
+https://satijalab.org/seurat/articles/multimodal_vignette.html  
+https://satijalab.org/seurat/articles/weighted_nearest_neighbor_analysis.html
+
+## Data loading
+create Seurat object from 10x data or RNA matrix data
+ 
+```{r, eval = FALSE}
+datapath <- ""
+Seuratobject <- readRDS(datapath)
+```
+
+## Data preprocessing
+SCT transformation to normalize RNA-Seq data
+1. calculate score to be regressed out, typically:
+ - percent.mt, S.Score, G2M.Score
+```{r, eval = FALSE}
+library(Seurat)
+library(sctransform)
+library(ggplot2)
+
+Seuratobject <- CellCycleScoring(SeuratObj, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+```
+ 
+2. SCTransform
+- regress out cell cycle effect on RNA counts, damaged cell(abnormality in mitochondria state)  
+- scale data and find top variables genes (according to your RAM)
+```{r, eval = FALSE}
+
+
+Seuratobject <- SCTransform(Seuratobjct, 
+                            vars.to.regress = c( "percent.mt", "S.Score", "G2M.Score" ))
+
+Seuratobject <- FindVariableFeatures(Seuratobject, nfeatures = 15000) 
+Seuratobject <- ScaleData(Seuratobject)
+
+```
+
+
+Or use function 
+```{r, eval = FALSE}
+Seurat.STnorm.pca <- function(SeuratObj){
+  
+  s.genes <- cc.genes$s.genes
+  g2m.genes <- cc.genes$g2m.genes
+  
+  
+  
+  SeuratObj <- CellCycleScoring(SeuratObj, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+  SeuratObj.ST <- SCTransform(SeuratObj, assay = "RNA",vars.to.regress =c( "percent.mt", "S.Score", "G2M.Score" ), return.only.var.genes = FALSE)
+  SeuratObj.ST <- FindVariableFeatures(SeuratObj.ST, nfeatures = 15000) 
+  SeuratObj.ST <- ScaleData(SeuratObj.ST)
+  SeuratObj.ST <- RunPCA(SeuratObj.ST)
+  
+  DefaultAssay(SeuratObj.ST) <- 'ADT'
+  # we will use all ADT features for dimensional reduction
+  # we set a dimensional reduction name to avoid overwriting the 
+  # VariableFeatures(SeuratObj.ST) <- rownames(SeuratObj.ST[["ADT"]])
+  SeuratObj.ST <- NormalizeData(SeuratObj.ST, assay = "ADT",normalization.method = 'CLR', margin = 2) %>% 
+    ScaleData() %>% RunPCA(reduction.name = 'apca')
+  return(SeuratObj.ST)
+}
+```
+
+## Data analysis 
+1. following standard clustering workflow 
+- run PCA, UMAP, TSNE, however UMAP is strongly recommended
+  
+```{r, eval = FALSE}
+Seuratobject<- RunUMAP(Seuratobject, features = VariableFeatures(object = Seuratobject))
+Seuratobject<- RunTSNE(Seuratobject, features = VariableFeatures(object = Seuratobject))
+
+#for multi-modal data, use function
+Seuratobject <- RunUMAP(Seuratobject, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+
+
+Seuratobject <- RunTSNE(Seuratobject, nn.name = "weighted.nn",
+                    reduction.name = "wnn.tsne",
+                    reduction.key = "wnnTSNE_")
+
+
+```
+  
+  
+- Clustering  
+One could experiment combinations of parameters for clustering method
+
+```{r, eval = FALSE}
+#for multi-model data, use function
+Seuratobject<- FindMultiModalNeighbors(
+  Seuratobject, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:18), modality.weight.name = "RNA.weight"
+)
+Seuratobject <- FindClusters(Seuratobject,
+                         graph.name = "wsnn",
+                         algorithm = 3, resolution = 0.5,
+                         verbose =TRUE)
+
+#for RNA data only 
+Seuratobject <- FindNeighbors(Seuratobject)
+Sueratobject <- FindClusters(Seuratobject)
+```
+
+- visualization of 2d clustering result
+```{r pressure, eval= FALSE}
+Dimplot(Seuratobject)
+
+#customized dimplot can be found in script
+```
+
+2. singler R cell typing
+```{r, eval = FALSE}
+Seurat.Singler.SCT <- function(SeuratObj, ref) {
+  
+  #requires reference file input for SingleR so the same function can be used for human and mice 
+  #also requires seurat clusters to be present
+  
+  
+  tt <-SeuratObj@assays[["SCT"]]@data
+  singler1<-SingleR(tt, ref=ref, labels = ref$cell.type,  method = c("cluster"),
+                    clusters=SeuratObj@meta.data$seurat_cluster,genes = "de", quantile = 0.8, fine.tune = TRUE,
+                    tune.thresh = 0.05, sd.thresh = 1, prune = TRUE,
+                    check.missing = TRUE)
+  
+  
+  ClusterCellTypes <- data.frame(singler1@listData[["pruned.labels"]])
+  Clusters <- data.frame(seurat_cluster=as.numeric(rownames(ClusterCellTypes))-1, cell.type=ClusterCellTypes[1])
+  
+  colnames(Clusters)[2]<-"cell.type"
+  rm(tt)
+  
+  
+  
+  MetaDataM <- data.frame(CellID=rownames(SeuratObj@meta.data),SeuratObj@meta.data)
+  #colnames(MetaDataM)[29]<-"cluster_subtype"
+  MetaDataM$cluster.type.singler <- "unclassified"
+  for (i in 1: nrow(MetaDataM)){
+    for (k in 1: nrow(Clusters)){
+      if (MetaDataM$seurat_cluster[i]==Clusters$seurat_cluster[k]) MetaDataM$cluster.type.singler[i]<-Clusters$cell.type[k]
+      
+      
+    } 
+  }
+  SeuratObj <- AddMetaData(SeuratObj, MetaDataM)
+  
+  
+  return(SeuratObj)
+  
+}
+ref <- readRDS(gzfile("C:/Users/jtao/work_dir/CTCL/data/encode-personalized-celltypes.rds"))
+
+Seuratobject <- SingleR(Seurat.Singler.SCT, ref)
+```
+
+
+3. differential gene expression analysis
+- for cell typing, looking into each cluster for differential gene profile, determine top 20-30 gene markers in each cluster  
+- manually check and extrapolate cell identity in each cluster
+
+```{r, eval = FALSE}
+Idents(Seuratobject) <-Seuratobject$seurat_clusters
+cluster_no <- length(unique(Seuratobject$seurat_clusters))
+cluster.markers.list <- list()
+for (i in 0:(cluster_no-1)){
+  j = i+1
+  cluster.markers.list[[j]] <- FindMarkers(Seuratobject, ident.1 = i, logfc.threshold = 0.25, test.use = "roc", only.pos = TRUE)
+}
+
+head(cluster.markers.list[[13]], 30)
+
+```
+
+
+
+- visualization of critical cell markers on RNA-Seq or protein level to determine cell type
+
+```{r, eval = FALSE}
+t_markers <- c("CD3D", "CD3E", "CD3F", "CD3G", "CD4", "CD8A", "CD8B")
+# t_markers<- c("CD3", "CD4", "CD8a", "CD8b")
+tcr_markers <-c("TRBC1", "TRBC2")
+pro_markers <- c("ACTG1", "ANP32B", "ATP5C1", "DUT", "HMGN1", "HN1",
+                 "NPM1", "NUSAP1", "PCNA", "PPA1", "PPIA", "PSMB2", "RAN",
+                 "RANBP1", "SET", "SMC4", "STMN1", "BIRC3", "JUNB", "TOX")
+```
+
+
+
+3. run InferCNV to identify tumor cells  
+- Check InferCNV wrapper
+
+4. if available, TCR clonotype analysis to identify underlying CTCL/PTCL cells
+```{r, eval = FALSE}
+tcrab <- read.table("C:/Users/jtao/work_dir/CTCL/data/cite-seq/CTCL-TCRab.csv",
+                    sep = ",", header = TRUE)
+
+```
+
+
+5. trajectory analysis  
+Use Monocle3 to simulate cell evolutions, which might indicate tumor evolution trajectory, help identify tumor population 
+```{r, eval = FALSE}
+library(Signac)
+library(SeuratWrappers)
+library(monocle3)
+library(Matrix)
+library(ggplot2)
+library(patchwork)
+library(magrittr)
+set.seed(1234)
+
+#subset the cell type used for trajectory analysis
+data.cds <- as.cell_data_set(Seuratobject)
+data.cds <- cluster_cells(data.cds)
+p1 <- plot_cells(data.cds, show_trajectory_graph = FALSE) + theme_void() +
+  theme(legend.position="top")
+p2 <- plot_cells(data.cds, color_cells_by = "partition", show_trajectory_graph = FALSE)
+p3 <- my_DimPlot(data_cd4)
+wrap_plots(p1, p3)
+data.cds <- learn_graph(data.cds, use_partition = TRUE)
+```
+
+
+
+## TRBC analysis 
+To look into T cell clonotypes and TRBC gene expression 
+- find out dominating clonotype and cdr3 sequence
+- before analyzing: clean unproductive contigs and look at TRB chain
+
+
+```{r, eval = FALSE}
+tcrb <- tcrab[tcrab$chain %in% c("TRB"),]
+sort(table(tcrb$cdr3), decreasing = TRUE)[1:4]
+
+par(mar=c(6,12,3,4))
+cdr3_a <- barplot(sort(table(tcrab$cdr3), decreasing = TRUE)[1:4],
+                  las = 2, cex.axis = 1.5, cex.lab = 1.5)
+aa <- sort(table(tcrb$cdr3), decreasing = TRUE)[1:4]
+aa <- as.data.frame(t(aa))
+png(file = paste(graph_dir, "clonotype.png", sep = ""),
+    width=10, height=6, units="in", res=100)
+clonetype <- barplot(sort(table(tcrb$raw_clonotype_id), decreasing = TRUE)[1:4],
+                     las = 2, cex.axis =1.2, cex.lab=1.2, space = 0.5,
+                     width = c(0.01,0.01,0.01,0.008),  ylab="Cell Counts",
+                     col=c("skyblue3", "skyblue3", "grey59", "grey59"))
+print(clonetype)
+dev.off()
+
+clonetype
+
+cdr3_seq <- ggplot(data = aa, aes(x = Var2, y = Freq)) + 
+  geom_bar(stat="identity", width = 0.5, fill = c("skyblue3", "grey59", "grey59", "grey59"))+ coord_flip() +
+  # scale_fill_manual(values = c("grey59", "grey59", "grey59","skyblue3")) +
+  theme (legend.position = "none", aspect.ratio = 1.5/1, axis.text = element_text(size = 12),
+  ) + labs(y = "Cell Counts", x = "TRB CDR3 sequence") + 
+  theme(panel.grid.minor = element_blank(),
+                                      panel.background = element_blank()) 
+
+save_png(cdr3_seq, "cdr3_seq", 10,5) 
+
+```
+
+## Helper functions  
+- for plotting TRBC proportion on TCR sequencing data 
+```{r, eval = FALSE}
+
+library(tidyverse)
+library(ggplot2)
+
+
+df <- read.table("C:/Users/jtao/work_dir/CTCL/data/cite-seq/CTCL-TCRab.csv", header=TRUE, sep=",")
+df<- df[df$raw_clonotype_id %in% c("clonotype1", "clonotype2"), ]
+df2 <- df %>% filter(high_confidence == "True"  & is_cell == "True" & productive=="True")
+
+dfsplit <- split(df2, df2$barcode)
+
+
+df.annotation <- matrix(nrow=length(dfsplit), ncol=4)
+
+for (i in 1:length(dfsplit)){
+  
+   df.temp <- as_tibble(dfsplit[[i]]) 
+   df.temp <-as_tibble( df.temp[order(df.temp$chain),])
+   #rownames(df.temp)<-NULL
+   df.annotation[[i,1]] <- names(dfsplit)[[i]]
+   temp <- ""
+   for (j in 1: nrow(df.temp)){
+     
+     temp <- paste(temp,df.temp$v_gene[j] ,sep="-")
+     temp <- paste(temp,df.temp$d_gene[j] ,sep="-")
+     temp <- paste(temp,df.temp$j_gene[j] ,sep="-")
+     temp <- paste(temp,df.temp$c_gene[j] ,sep="-")
+     temp <- paste(temp,df.temp$cdr3[j] ,sep="-")
+     
+     temp2 <-"none"
+     if (nrow(df.temp)>0){
+      if (nrow(df.temp)<=2 & df.temp$chain[j]=="TRB"){
+         temp2 <- "none"
+         
+         if (df.temp$c_gene[j]=="TRBC2" & substr(df.temp$j_gene[j], 1,5 )=="TRBJ2"){
+          temp2 <- df.temp$c_gene[j]
+          
+          
+         }
+         
+         if (df.temp$c_gene[j]=="TRBC1" & substr(df.temp$j_gene[j], 1,5 )=="TRBJ1"){
+            temp2 <- df.temp$c_gene[j]
+            
+            
+         }
+         
+      }
+      if (nrow(df.temp) >2){
+          if (sum(df.temp$chain=="TRB") >1) temp2<- "multi"
+         if (sum(df.temp$chain=="TRB") ==1) temp2<- df.temp$c_gene[j]
+      }
+     
+     }
+     
+   } 
+   df.annotation[[i,2]] <- temp
+   df.annotation[[i,3]] <-dfsplit[[i]]$raw_clonotype_id[1]
+   df.annotation[[i,4]] <- temp2
+}
+
+colnames(df.annotation) <- c("barcode", "TCR_sequence","clonotype_id", "TRB_c_gene")
+#df.annotation[,1] <- gsub("-1","",df.annotation[,1])
+df.annotation[,4]<-recode(df.annotation[,4], "None"="none")
+
+write.table(df.annotation,"C:/Users/jtao/work_dir/CTCL/data/cite-seq/CTCL-TCRab_annoted.csv", sep="\t", row.names = FALSE
+```
+
+
+- Plot TRBC data on a RNA seq level
+```{r, eval = FALSE}
+
+plot_trbc_clone <- function(seurat_object_sample) {
+  tcr_markers <- c("TRBC1", "TRBC2")
+  title <- unique(seurat_object_sample$clone_type)
+  # title <- ("CTCL sample")
+  df<- seurat_object_sample@assays[["SCT"]]@data[tcr_markers,]
+  df_aa <- data.frame("TRBC1" = as.vector(df["TRBC1", ]),
+                      "TRBC2" = as.vector(df["TRBC2", ]))
+  df_aa <- df_aa[df_aa[, "TRBC1"] >0 & df_aa[, "TRBC2"] >0, ]
+  df_aa$color <- ifelse(df_aa$TRBC1>1 & df_aa$TRBC2 >1, "orchid",
+                        ifelse(df_aa$TRBC1>1, "skyblue3"
+                               , ifelse(df_aa$TRBC2>1, "indianred3", "grey59")) )
+  df_aa$label <- ifelse(df_aa$TRBC1>1 & df_aa$TRBC2 >1, "TRBC1 > 1, TRBC2 > 1",
+                        ifelse(df_aa$TRBC1>1 & df_aa$TRBC2<1, "TRBC1 > 1, TRBC2 < 1"
+                               , ifelse(df_aa$TRBC2>1, "TRBC1 < 1, TRBC2 > 1 ", "TRBC1 < 1, TRBC2 < 1")) )
+  
+  sp <- ggplot(df_aa) +
+    geom_point(aes(x = TRBC2, y = TRBC1, colour = label), size  = 2) + 
+    scale_color_manual(values =c("grey59", "indianred3","skyblue3","orchid")) + 
+    geom_hline(yintercept= 1, linetype = "dotted", color = "red", 
+               size = 1)  +  geom_vline(xintercept = 1, linetype = "dotted", color = "red", size = 1) +
+    labs(x = 'TRBC2 Expression',y = "TRBC1 Expression", colour = "Expression Group", title = "") + 
+    theme(axis.title= element_text(size = 13),
+          panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          legend.position = "right",
+          legend.text = element_text(size = 11),
+          aspect.ratio = 1/3) +coord_fixed()
+  
+  sp
+  bp <- ggplot(df_aa, aes(x=label, fill = color)) + geom_bar(width = 0.5)+ coord_flip() +
+    scale_fill_manual(values = c("grey59", "indianred3", "orchid","skyblue3")) +
+    theme (legend.position = "none", aspect.ratio = 1.5/1, axis.text = element_text(size = 10),
+           axis.title.y = element_blank()
+    ) + labs(y = "Cell Counts")
+  
+  plot_row <- plot_grid(sp,bp, align = "h", rel_widths = c(2,1.2)) 
+  ptitle <- ggdraw() + draw_label(title, fontface='bold')
+  plot_row <- plot_grid(ptitle, plot_row , ncol=1, rel_heights=c(0.05, 1)) # rel_heights values control title margins
+  
+  return (plot_row)
+  
+}
+
+```
+
+- Plot dimplot and save png
+
+```{r, eval}
+my_DimPlot <- function(SeuratObject){
+  pdim<- DimPlot(SeuratObject, reduction = "umap",
+                 label = TRUE, 
+                 # cols = MyColorsCellTypes,
+                 pt.size = 1, 
+                 repel = TRUE,
+                 label.size = 4)+theme_void()+theme(legend.position="top")
+  return (pdim)}
+
+save_png <- function(plot, pngname, png_width, png_height){
+  png(file = paste(graph_dir, pngname, ".png", sep=""),
+      width=png_width, height=png_height, units="in", res=200)
+  print(plot)
+  dev.off()
+}
+```
+
+- Plotting heatmap
+<!-- ## Including Plots -->
+
+<!-- You can also embed plots, for example: -->
+
+<!-- # ```{r pressure, echo=FALSE} -->
+<!-- # plot(pressure) -->
+<!-- # ``` -->
+
+<!-- Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot. -->
