@@ -34,6 +34,8 @@ library(Seurat)
 library(sctransform)
 library(ggplot2)
 
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
 Seuratobject <- CellCycleScoring(SeuratObj, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
 ```
  
